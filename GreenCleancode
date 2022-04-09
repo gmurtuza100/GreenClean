@@ -1,0 +1,130 @@
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#define ONE_WIRE_BUS 6
+#include <LiquidCrystal.h>
+#define FLOWSENSORPIN 5
+int rs = 7;
+int en = 8;
+int d4 = 9;
+int d5 = 10;
+int d6 = 11;
+int d7 = 12;
+int b1 = 4;
+int b2 = 3;
+int bz = 2;
+int numL = 0;
+boolean limit = true;
+volatile uint16_t pulses = 0;
+volatile uint8_t lastflowpinstate;
+volatile uint32_t lastflowratetimer = 0;
+volatile float flowrate;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+OneWire oneWire(ONE_WIRE_BUS);
+
+DallasTemperature sensors(&oneWire);
+
+float Celsius = 0;
+float Fahrenheit = 0;
+SIGNAL(TIMER0_COMPA_vect) {
+  uint8_t x = digitalRead(FLOWSENSORPIN);
+  
+  if (x == lastflowpinstate) {
+    lastflowratetimer++;
+    return; 
+  }
+  
+  if (x == HIGH) {
+
+    pulses++;
+  }
+  lastflowpinstate = x;
+  flowrate = 1000.0;
+  flowrate /= lastflowratetimer;  // in hertz
+  lastflowratetimer = 0;
+}
+void useInterrupt(boolean v) {
+  if (v) {
+ 
+    OCR0A = 0xAF;
+    TIMSK0 |= _BV(OCIE0A);
+  } else {
+
+    TIMSK0 &= ~_BV(OCIE0A);
+  }
+}
+
+void setup() {
+  sensors.begin();
+  Serial.begin(9600);
+  lcd.begin(16,12);
+  pinMode(FLOWSENSORPIN, INPUT);
+   digitalWrite(FLOWSENSORPIN, HIGH);
+   lastflowpinstate = digitalRead(FLOWSENSORPIN);
+   useInterrupt(true);
+  pinMode(b1,INPUT);
+  pinMode(b2, INPUT);
+  digitalWrite(b1,HIGH);
+  digitalWrite(b2,HIGH);
+  pinMode(bz,OUTPUT);
+   
+
+   lcd.print("How many liters?");
+   delay(1000);
+   while(true){
+     lcd.print(numL);
+     lcd.print(" Liter Shower");
+     delay(500);
+     lcd.clear();
+     int a = digitalRead(b1);
+     int b = digitalRead(b2);
+      if(a == 0 && b == 0)
+        break;
+      else if(a == 0)
+        numL++;
+      else if(b == 0)
+        numL--;
+      if(numL < 0)
+        numL=0;
+   }
+   Serial.println(numL);
+   delay(1000);
+}
+
+void loop() {
+ 
+  sensors.requestTemperatures();
+
+  Celsius = sensors.getTempCByIndex(0);
+  Fahrenheit = sensors.toFahrenheit(Celsius);
+  lcd.setCursor(0,0);
+  lcd.print(Celsius);
+  lcd.print("C ");
+  Serial.print(Celsius);
+  Serial.print(" C  ");
+  Serial.print(Fahrenheit);
+  Serial.println(" F");
+  
+
+
+  //lcd.print(flowrate);
+  Serial.print("Freq: "); Serial.println(flowrate);
+  Serial.print("Pulses: "); Serial.println(pulses, DEC);
+  
+  float liters = pulses;
+  liters /= 7.5;
+  liters /= 60.0;
+
+ if(liters > numL && limit){
+    digitalWrite(bz,HIGH);
+    delay(500);
+    digitalWrite(bz,LOW);
+    limit = false;
+  }
+  Serial.print(liters); Serial.println(" Liters");
+  lcd.setCursor(0, 1);
+  lcd.print(liters); lcd.print(" Liters        ");
+ 
+  delay(100);
+  
+}
